@@ -8,16 +8,16 @@ VALUE_CATEGORIES = [
     "Историческая память и преемственность поколений", "Единство народов России"
 ]
 
-# Параметры модели
+# Оптимизированные параметры
 MODEL_NAME = 'sberbank-ai/ruBert-base'  # Более легкая модель
-MAX_LENGTH = 128  # Уменьшенная длина текста
-BATCH_SIZE = 8    # Оптимальный размер батча для CPU
+MAX_LENGTH = 128  # Оптимальная длина
+BATCH_SIZE = 32   # Увеличенный размер батча (благодаря RAM)
 LEARNING_RATE = 2e-5
 EPOCHS = 10
 MODEL_SAVE_PATH = 'values_classifier.pt'
 
-# Оптимизации для CPU
-OMP_NUM_THREADS = 16  # Используем половину ядер
+# Настройки параллелизма
+OMP_NUM_THREADS = 32  # Используем все 32 потока
 KMP_AFFINITY = "granularity=fine,compact,1,0"
 
 ATTENTION_IMPLEMENTATION = "eager"  # Решает проблему с предупреждением

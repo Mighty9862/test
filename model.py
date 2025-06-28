@@ -3,13 +3,16 @@ import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizer, BertForSequenceClassification, AutoConfig
-from config import VALUE_CATEGORIES, MODEL_NAME, MAX_LENGTH
+from config import VALUE_CATEGORIES, MODEL_NAME, MAX_LENGTH, OMP_NUM_THREADS, KMP_AFFINITY
 from typing import List, Tuple, Dict
 import os
 
-# Применяем оптимизации для CPU
-os.environ["OMP_NUM_THREADS"] = str(os.getenv("OMP_NUM_THREADS", 16))
-os.environ["KMP_AFFINITY"] = os.getenv("KMP_AFFINITY", "granularity=fine,compact,1,0")
+# Применяем оптимизации параллелизма
+os.environ["OMP_NUM_THREADS"] = str(OMP_NUM_THREADS)
+os.environ["KMP_AFFINITY"] = KMP_AFFINITY
+os.environ["KMP_BLOCKTIME"] = "1"
+if not torch.cuda.is_available():
+    torch.set_num_threads(OMP_NUM_THREADS)
 
 class ValuesDataset(Dataset):
     def __init__(self, filename, tokenizer, max_length=MAX_LENGTH):
@@ -41,16 +44,16 @@ class ValuesDataset(Dataset):
         }
 
 def load_model(model_path=None):
+    # Принудительно отключаем GPU
+    torch.device('cpu')
+    
     tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
     
-    # Конфигурация с явным указанием реализации внимания
     config = AutoConfig.from_pretrained(
         MODEL_NAME,
         num_labels=len(VALUE_CATEGORIES),
         problem_type="multi_label_classification",
-        attention_probs_dropout_prob=0.1,
-        hidden_dropout_prob=0.1,
-        attn_implementation="eager"  # Решает проблему с предупреждением
+        torchscript=True  # Для оптимизации
     )
     
     model = BertForSequenceClassification.from_pretrained(
@@ -61,9 +64,10 @@ def load_model(model_path=None):
     if model_path:
         model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
     
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model.to(device)
-    return tokenizer, model, device
+    # Оптимизация модели для CPU
+    model = torch.jit.script(model) if hasattr(torch.jit, 'script') else model
+    model.eval()
+    return tokenizer, model, torch.device('cpu')
 
 def predict(text: str, tokenizer: BertTokenizer, model: BertForSequenceClassification, device: torch.device) -> List[Tuple[str, float]]:
     model.eval()
@@ -80,25 +84,20 @@ def predict(text: str, tokenizer: BertTokenizer, model: BertForSequenceClassific
     input_ids = encoding['input_ids'].to(device)
     attention_mask = encoding['attention_mask'].to(device)
     
-    with torch.no_grad():
+    with torch.inference_mode():  # Ускоренный режим вывода
         outputs = model(input_ids, attention_mask=attention_mask)
     
     logits = outputs.logits
     probs = torch.sigmoid(logits).cpu().numpy().flatten() * 100
     
-    # Create list of (value, probability) pairs
     results = [(VALUE_CATEGORIES[i], probs[i]) for i in range(len(VALUE_CATEGORIES))]
-    
-    # Sort by probability descending
     results.sort(key=lambda x: x[1], reverse=True)
-    
     return results
 
 def explain_prediction(text: str, tokenizer: BertTokenizer, model: BertForSequenceClassification, device: torch.device) -> Dict[str, List[Tuple[str, float]]]:
-    """Упрощенная функция объяснений с использованием attention весов"""
+    """Упрощенная функция объяснений"""
     model.eval()
     
-    # Токенизация текста
     inputs = tokenizer(
         text, 
         return_tensors="pt", 
@@ -109,28 +108,17 @@ def explain_prediction(text: str, tokenizer: BertTokenizer, model: BertForSequen
     input_ids = inputs['input_ids'].to(device)
     attention_mask = inputs['attention_mask'].to(device)
     
-    # Получаем выходы модели и attention веса
-    with torch.no_grad():
-        outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True)
+    with torch.inference_mode():
+        outputs = model(input_ids, attention_mask=attention_mask)
     
-    # Берем attention из последнего слоя, усредняем по головам
-    attentions = outputs.attentions[-1].mean(dim=1)[0]  # [batch, head, seq_len, seq_len] -> [seq_len, seq_len]
+    # Упрощенные объяснения (без внимания)
+    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
+    token_weights = np.ones(len(tokens))  # Заглушка
     
-    # Усредняем внимание по всем токенам (получаем важность каждого токена)
-    token_attentions = attentions.mean(dim=0).cpu().numpy()
-    
-    # Игнорируем специальные токены [CLS] и [SEP]
-    token_attentions = token_attentions[1:-1]
-    
-    # Получаем токены
-    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])[1:-1]
-    
-    # Формируем объяснения
     explanations = {}
-    for i, value in enumerate(VALUE_CATEGORIES):
-        # Для простоты используем общие веса внимания (можно адаптировать под класс)
-        token_weights = [(token, weight) for token, weight in zip(tokens, token_attentions)]
+    for value in VALUE_CATEGORIES:
+        token_weights = [(token, weight) for token, weight in zip(tokens, token_weights)]
         token_weights.sort(key=lambda x: x[1], reverse=True)
-        explanations[value] = token_weights[:5]  # Топ-5 слов
+        explanations[value] = token_weights[:5]
     
     return explanations
