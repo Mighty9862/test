@@ -9,9 +9,15 @@ VALUE_CATEGORIES = [
 ]
 
 # Параметры модели
-MODEL_NAME = 'sberbank-ai/ruBert-large'  # Более мощная модель
-LEARNING_RATE = 3e-5
-BATCH_SIZE = 16
-MAX_LENGTH = 256
-EPOCHS = 20  # Больше эпох
+MODEL_NAME = 'sberbank-ai/ruBert-base'  # Более легкая модель
+MAX_LENGTH = 128  # Уменьшенная длина текста
+BATCH_SIZE = 8    # Оптимальный размер батча для CPU
+LEARNING_RATE = 2e-5
+EPOCHS = 10
 MODEL_SAVE_PATH = 'values_classifier.pt'
+
+# Оптимизации для CPU
+OMP_NUM_THREADS = 16  # Используем половину ядер
+KMP_AFFINITY = "granularity=fine,compact,1,0"
+
+ATTENTION_IMPLEMENTATION = "eager"  # Решает проблему с предупреждением

@@ -2,9 +2,14 @@ import torch
 import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import BertTokenizer, BertForSequenceClassification, AutoConfig
 from config import VALUE_CATEGORIES, MODEL_NAME, MAX_LENGTH
 from typing import List, Tuple, Dict
+import os
+
+# Применяем оптимизации для CPU
+os.environ["OMP_NUM_THREADS"] = str(os.getenv("OMP_NUM_THREADS", 16))
+os.environ["KMP_AFFINITY"] = os.getenv("KMP_AFFINITY", "granularity=fine,compact,1,0")
 
 class ValuesDataset(Dataset):
     def __init__(self, filename, tokenizer, max_length=MAX_LENGTH):
@@ -38,21 +43,19 @@ class ValuesDataset(Dataset):
 def load_model(model_path=None):
     tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
     
-    # Улучшенная конфигурация модели
-    model = BertForSequenceClassification.from_pretrained(
+    # Конфигурация с явным указанием реализации внимания
+    config = AutoConfig.from_pretrained(
         MODEL_NAME,
         num_labels=len(VALUE_CATEGORIES),
         problem_type="multi_label_classification",
-        output_attentions=True,  # Сохраняем attention для объяснений
-        output_hidden_states=True
+        attention_probs_dropout_prob=0.1,
+        hidden_dropout_prob=0.1,
+        attn_implementation="eager"  # Решает проблему с предупреждением
     )
     
-    # Добавляем дополнительные слои для лучшей классификации
-    model.classifier = torch.nn.Sequential(
-        torch.nn.Linear(model.config.hidden_size, 256),
-        torch.nn.ReLU(),
-        torch.nn.Dropout(0.3),
-        torch.nn.Linear(256, len(VALUE_CATEGORIES))
+    model = BertForSequenceClassification.from_pretrained(
+        MODEL_NAME,
+        config=config
     )
     
     if model_path:
@@ -83,21 +86,16 @@ def predict(text: str, tokenizer: BertTokenizer, model: BertForSequenceClassific
     logits = outputs.logits
     probs = torch.sigmoid(logits).cpu().numpy().flatten() * 100
     
-    # Создаем список пар (ценность, вероятность)
+    # Create list of (value, probability) pairs
     results = [(VALUE_CATEGORIES[i], probs[i]) for i in range(len(VALUE_CATEGORIES))]
     
-    # Сортировка по убыванию вероятности
+    # Sort by probability descending
     results.sort(key=lambda x: x[1], reverse=True)
     
     return results
 
 def explain_prediction(text: str, tokenizer: BertTokenizer, model: BertForSequenceClassification, device: torch.device) -> Dict[str, List[Tuple[str, float]]]:
-    """
-    Улучшенная функция объяснений с использованием Integrated Gradients
-    """
-    from captum.attr import LayerIntegratedGradients
-    from captum.attr import visualization as viz
-    
+    """Упрощенная функция объяснений с использованием attention весов"""
     model.eval()
     
     # Токенизация текста
@@ -111,58 +109,28 @@ def explain_prediction(text: str, tokenizer: BertTokenizer, model: BertForSequen
     input_ids = inputs['input_ids'].to(device)
     attention_mask = inputs['attention_mask'].to(device)
     
-    # Функция для получения предсказаний модели
-    def forward_func(input_ids, attention_mask):
-        outputs = model(input_ids, attention_mask=attention_mask)
-        return outputs.logits
+    # Получаем выходы модели и attention веса
+    with torch.no_grad():
+        outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True)
     
-    # Инициализация метода объяснений
-    lig = LayerIntegratedGradients(
-        forward_func,
-        model.bert.embeddings
-    )
+    # Берем attention из последнего слоя, усредняем по головам
+    attentions = outputs.attentions[-1].mean(dim=1)[0]  # [batch, head, seq_len, seq_len] -> [seq_len, seq_len]
     
-    # Базовые значения (нулевые эмбеддинги)
-    baseline = torch.zeros_like(input_ids).to(device)
+    # Усредняем внимание по всем токенам (получаем важность каждого токена)
+    token_attentions = attentions.mean(dim=0).cpu().numpy()
     
-    # Вычисление атрибуций
-    attributions, delta = lig.attribute(
-        inputs=(input_ids, attention_mask),
-        baselines=(baseline, attention_mask),
-        return_convergence_delta=True
-    )
-    
-    # Суммируем атрибуции по слоям
-    attributions_sum = attributions.sum(dim=2).squeeze(0).cpu().detach().numpy()
-    
-    # Нормализация
-    attributions_sum = np.abs(attributions_sum)
-    attributions_sum /= attributions_sum.max()
+    # Игнорируем специальные токены [CLS] и [SEP]
+    token_attentions = token_attentions[1:-1]
     
     # Получаем токены
-    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
+    tokens = tokenizer.convert_ids_to_tokens(input_ids[0])[1:-1]
     
-    # Формируем объяснения для каждой ценности
+    # Формируем объяснения
     explanations = {}
-    logits = model(input_ids, attention_mask=attention_mask).logits[0].cpu().detach().numpy()
-    
     for i, value in enumerate(VALUE_CATEGORIES):
-        # Вес класса
-        class_weight = np.exp(logits[i]) / (1 + np.exp(logits[i]))
-        
-        # Умножаем атрибуции на вес класса
-        weighted_attributions = attributions_sum * class_weight
-        
-        # Собираем пары (токен, вес)
-        token_weights = [(token, weight) for token, weight in zip(tokens, weighted_attributions)]
-        
-        # Фильтруем специальные токены
-        token_weights = [tw for tw in token_weights if tw[0] not in ['[CLS]', '[SEP]', '[PAD]']]
-        
-        # Сортируем по убыванию веса
+        # Для простоты используем общие веса внимания (можно адаптировать под класс)
+        token_weights = [(token, weight) for token, weight in zip(tokens, token_attentions)]
         token_weights.sort(key=lambda x: x[1], reverse=True)
-        
-        # Берем топ-5 самых важных слов
-        explanations[value] = token_weights[:5]
+        explanations[value] = token_weights[:5]  # Топ-5 слов
     
     return explanations

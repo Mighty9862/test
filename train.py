@@ -6,6 +6,11 @@ from config import MODEL_NAME, BATCH_SIZE, EPOCHS, LEARNING_RATE, VALUE_CATEGORI
 import time
 import numpy as np
 from sklearn.metrics import f1_score
+import os
+import psutil
+
+# Оптимизация использования памяти
+torch.set_num_threads(int(os.getenv("OMP_NUM_THREADS", 16)))
 
 def calculate_f1(model, dataloader, device):
     model.eval()
@@ -32,13 +37,22 @@ def calculate_f1(model, dataloader, device):
     # Macro F1-score
     return f1_score(true_labels, pred_labels, average='macro')
 
+def print_memory_usage():
+    process = psutil.Process()
+    mem = process.memory_info().rss / (1024 ** 3)  # В гигабайтах
+    print(f"Использование памяти: {mem:.2f} GB")
+
 def main():
-    # Инициализация модели
+    print("Начало загрузки модели...")
     tokenizer, model, device = load_model()
+    print(f"Модель загружена на {device}")
+    print_memory_usage()
     
     # Загрузка и разделение данных
     try:
+        print("Загрузка датасета...")
         full_dataset = ValuesDataset('values_dataset.csv', tokenizer)
+        print(f"Загружено примеров: {len(full_dataset)}")
         
         # Разделение на обучение и валидацию (80/20)
         train_size = int(0.8 * len(full_dataset))
@@ -50,6 +64,8 @@ def main():
         
         train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+        print(f"Размер обучающей выборки: {len(train_dataset)}")
+        print(f"Размер валидационной выборки: {len(val_dataset)}")
         
     except FileNotFoundError:
         print("Ошибка: Файл данных 'values_dataset.csv' не найден")
@@ -60,13 +76,13 @@ def main():
     
     # Обучение
     best_f1 = 0.0
-    model.train()
     print(f"Начало обучения на {device}...")
     
     for epoch in range(EPOCHS):
         start_time = time.time()
         total_loss = 0
         model.train()
+        batch_count = 0
         
         for batch in train_loader:
             input_ids = batch['input_ids'].to(device)
@@ -86,6 +102,11 @@ def main():
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            
+            batch_count += 1
+            if batch_count % 10 == 0:
+                print(f"Эпоха {epoch+1} | Батч {batch_count}/{len(train_loader)} | Loss: {loss.item():.4f}")
+                print_memory_usage()
         
         # Валидация
         model.eval()
@@ -94,7 +115,8 @@ def main():
         epoch_time = time.time() - start_time
         avg_loss = total_loss / len(train_loader)
         
-        print(f"Эпоха {epoch+1}/{EPOCHS} | Loss: {avg_loss:.4f} | Val F1: {val_f1:.4f} | Время: {epoch_time:.2f}s")
+        print(f"Эпоха {epoch+1}/{EPOCHS} завершена | Loss: {avg_loss:.4f} | Val F1: {val_f1:.4f} | Время: {epoch_time:.2f}s")
+        print_memory_usage()
         
         # Сохранение лучшей модели
         if val_f1 > best_f1:
