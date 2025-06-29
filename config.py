@@ -1,4 +1,3 @@
-# Список всех ценностей (17 классов)
 VALUE_CATEGORIES = [
     "Жизнь", "Достоинство", "Права и свободы человека", 
     "Патриотизм", "Гражданственность", "Служение Отечеству и ответственность за его судьбу",
@@ -8,13 +7,13 @@ VALUE_CATEGORIES = [
     "Историческая память и преемственность поколений", "Единство народов России"
 ]
 
-# Оптимизированные параметры
-MODEL_NAME = 'sberbank-ai/ruBert-base'  # Более легкая модель
-MAX_LENGTH = 128  # Оптимальная длина
-BATCH_SIZE = 32   # Увеличенный размер батча (благодаря RAM)
-LEARNING_RATE = 2e-5
+MODEL_NAME = 'sberbank-ai/ruBert-base'
+MAX_LENGTH = 128
+BATCH_SIZE = 16
+LEARNING_RATE = 3e-5
 EPOCHS = 10
 MODEL_SAVE_PATH = 'values_classifier.pt'
+PREDICTION_THRESHOLD = 0.3
 
 # Настройки параллелизма
 OMP_NUM_THREADS = 32  # Используем все 32 потока

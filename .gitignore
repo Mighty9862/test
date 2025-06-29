@@ -1,0 +1,10 @@
+test1.py
+train1.py
+model1.py
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.pkl.gz
+config1.py
