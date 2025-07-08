@@ -1,7 +1,7 @@
 import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, random_split
-from model1 import ValuesDataset, load_model
+from model import ValuesDataset, load_model
 from config import MODEL_NAME, BATCH_SIZE, EPOCHS, LEARNING_RATE, MODEL_SAVE_PATH, PREDICTION_THRESHOLD
 import time
 import numpy as np
