@@ -11,9 +11,9 @@ MODEL_NAME = 'sberbank-ai/ruBert-base'
 MAX_LENGTH = 128
 BATCH_SIZE = 16
 LEARNING_RATE = 3e-5
-EPOCHS = 10
+EPOCHS = 5  # Уменьшаем количество эпох для ускорения обучения
 MODEL_SAVE_PATH = 'values_classifier.pt'
-PREDICTION_THRESHOLD = 0.3
+PREDICTION_THRESHOLD = 0.2  # Снижаем порог для увеличения чувствительности модели
 
 # Настройки параллелизма
 OMP_NUM_THREADS = 32  # Используем все 32 потока
