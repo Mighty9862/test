@@ -2,7 +2,7 @@ import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, random_split
 from model import ValuesDataset, load_model
-from config import MODEL_NAME, BATCH_SIZE, EPOCHS, LEARNING_RATE, MODEL_SAVE_PATH, PREDICTION_THRESHOLD, VALUE_CATEGORIES
+from config import MODEL_NAME, BATCH_SIZE, EPOCHS, LEARNING_RATE, MODEL_SAVE_PATH, PREDICTION_THRESHOLD, VALUE_CATEGORIES, OMP_NUM_THREADS
 import time
 import numpy as np
 from sklearn.metrics import f1_score, classification_report
