@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./static:/app/static
+      - ./values_classifier.pt:/app/values_classifier.pt
+    environment:
+      - PYTHONUNBUFFERED=1

@@ -78,30 +78,48 @@ def load_model(model_path=None):
 
     return tokenizer, model, device
 
-def predict(text, tokenizer, model, device, threshold=None):
-    """Предсказание ценностей для текста."""
+def predict_long_text(text, tokenizer, model, device, threshold=None, chunk_size=MAX_LENGTH-2):
+    """Предсказание для длинных текстов с разбиением на части."""
     model.eval()
-    encoding = tokenizer.encode_plus(
-        text,
-        add_special_tokens=True,
-        max_length=MAX_LENGTH,
-        padding='max_length',
-        truncation=True,
-        return_attention_mask=True,
-        return_tensors='pt',
-        return_token_type_ids=False
-    )
-
-    input_ids = encoding['input_ids'].to(device)
-    attention_mask = encoding['attention_mask'].to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids, attention_mask=attention_mask)
-
-    logits = outputs.logits
-    probs = torch.sigmoid(logits).cpu().numpy().flatten() * 100
     threshold = threshold or PREDICTION_THRESHOLD
-    results = [(VALUE_CATEGORIES[i], probs[i]) for i in range(len(VALUE_CATEGORIES)) if probs[i] >= threshold * 100]
+    
+    # Очистка текста
+    text = re.sub(r'\s+', ' ', str(text).lower().strip())
+    
+    # Токенизация текста
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    if len(tokens) <= chunk_size:
+        return predict(text, tokenizer, model, device, threshold)
+    
+    # Разбиение на части
+    chunks = [tokens[i:i + chunk_size] for i in range(0, len(tokens), chunk_size)]
+    all_probs = []
+    
+    for chunk in chunks:
+        chunk_text = tokenizer.decode(chunk, skip_special_tokens=True)
+        encoding = tokenizer.encode_plus(
+            chunk_text,
+            add_special_tokens=True,
+            max_length=MAX_LENGTH,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+            return_token_type_ids=False
+        )
+        
+        input_ids = encoding['input_ids'].to(device)
+        attention_mask = encoding['attention_mask'].to(device)
+        
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+        
+        probs = torch.sigmoid(outputs.logits).cpu().numpy().flatten()
+        all_probs.append(probs)
+    
+    # Усреднение вероятностей по всем частям
+    avg_probs = np.mean(all_probs, axis=0) * 100
+    results = [(VALUE_CATEGORIES[i], avg_probs[i]) for i in range(len(VALUE_CATEGORIES)) if avg_probs[i] >= threshold * 100]
     results.sort(key=lambda x: x[1], reverse=True)
     return results
 
