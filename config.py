@@ -1,3 +1,6 @@
+import os
+import psutil
+
 VALUE_CATEGORIES = [
     "Жизнь", "Достоинство", "Права и свободы человека", 
     "Патриотизм", "Гражданственность", "Служение Отечеству и ответственность за его судьбу",
@@ -8,15 +11,16 @@ VALUE_CATEGORIES = [
 ]
 
 MODEL_NAME = 'sberbank-ai/ruBert-base'
-MAX_LENGTH = 128
+MAX_LENGTH = 512
 BATCH_SIZE = 16
-LEARNING_RATE = 3e-5
-EPOCHS = 5  # Уменьшаем количество эпох для ускорения обучения
+LEARNING_RATE = 2e-5
+EPOCHS = 10
 MODEL_SAVE_PATH = 'values_classifier.pt'
-PREDICTION_THRESHOLD = 0.2  # Снижаем порог для увеличения чувствительности модели
+PREDICTION_THRESHOLD = 0.5
+EARLY_STOPPING_PATIENCE = 3 
+LOG_FILE = 'training.log'
 
-# Настройки параллелизма
-OMP_NUM_THREADS = 32  # Используем все 32 потока
+
+OMP_NUM_THREADS = str(min(psutil.cpu_count(logical=False), 32))
 KMP_AFFINITY = "granularity=fine,compact,1,0"
-
-ATTENTION_IMPLEMENTATION = "eager"  # Решает проблему с предупреждением
+ATTENTION_IMPLEMENTATION = "sdpa" if torch.cuda.is_available() else "eager"

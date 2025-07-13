@@ -4,24 +4,47 @@ import numpy as np
 from torch.utils.data import Dataset
 from transformers import BertTokenizer, BertForSequenceClassification
 from config import VALUE_CATEGORIES, MODEL_NAME, MAX_LENGTH
-import torch.nn.functional as F
 import re
 import string
-
+from captum.attr import IntegratedGradients
 
 class ValuesDataset(Dataset):
     def __init__(self, filename, tokenizer, max_length=MAX_LENGTH):
+        """Инициализация датасета с проверкой и очисткой данных."""
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"Файл {filename} не найден")
+        
         self.df = pd.read_csv(filename)
+        expected_columns = ['text'] + VALUE_CATEGORIES
+        if not all(col in self.df.columns for col in expected_columns):
+            raise ValueError(f"В файле {filename} отсутствуют необходимые столбцы: {expected_columns}")
+        
+        # Очистка текста
+        self.df['text'] = self.df['text'].apply(self._clean_text)
+        self.df = self.df.dropna(subset=['text'])
+        self.df = self.df[self.df['text'].str.strip() != '']
+        
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.texts = self.df['text'].tolist()
         self.labels = self.df[VALUE_CATEGORIES].values.astype(np.float32)
+        
+        # Проверка меток на NaN и бесконечные значения
+        if np.any(np.isnan(self.labels)) or np.any(np.isinf(self.labels)):
+            raise ValueError("Обнаружены NaN или бесконечные значения в метках")
+
+    def _clean_text(self, text):
+        """Очистка текста."""
+        text = str(text).lower().strip()
+        text = re.sub(r'\s+', ' ', text)  # Удаление лишних пробелов
+        text = re.sub(r'[^\w\s]', ' ', text)  # Удаление пунктуации
+        return text
 
     def __len__(self):
         return len(self.texts)
 
     def __getitem__(self, idx):
-        text = str(self.texts[idx])
+        text = self.texts[idx]
         encoding = self.tokenizer.encode_plus(
             text,
             add_special_tokens=True,
@@ -38,8 +61,8 @@ class ValuesDataset(Dataset):
             'labels': torch.tensor(self.labels[idx], dtype=torch.float)
         }
 
-
 def load_model(model_path=None):
+    """Загрузка модели и токенизатора."""
     tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)
     model = BertForSequenceClassification.from_pretrained(
         MODEL_NAME,
@@ -50,13 +73,13 @@ def load_model(model_path=None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
-    if model_path:
+    if model_path and os.path.exists(model_path):
         model.load_state_dict(torch.load(model_path, map_location=device))
 
     return tokenizer, model, device
 
-
-def predict(text, tokenizer, model, device):
+def predict(text, tokenizer, model, device, threshold=None):
+    """Предсказание ценностей для текста."""
     model.eval()
     encoding = tokenizer.encode_plus(
         text,
@@ -77,15 +100,15 @@ def predict(text, tokenizer, model, device):
 
     logits = outputs.logits
     probs = torch.sigmoid(logits).cpu().numpy().flatten() * 100
-
-    results = [(VALUE_CATEGORIES[i], probs[i]) for i in range(len(VALUE_CATEGORIES))]
+    threshold = threshold or PREDICTION_THRESHOLD
+    results = [(VALUE_CATEGORIES[i], probs[i]) for i in range(len(VALUE_CATEGORIES)) if probs[i] >= threshold * 100]
     results.sort(key=lambda x: x[1], reverse=True)
     return results
 
-
-
 def explain_keywords(text, tokenizer, model, device, top_n=5):
+    """Объяснение предсказаний с использованием Integrated Gradients."""
     model.eval()
+    ig = IntegratedGradients(model)
 
     encoding = tokenizer(
         text,
@@ -99,28 +122,25 @@ def explain_keywords(text, tokenizer, model, device, top_n=5):
 
     input_ids = encoding['input_ids'].to(device)
     attention_mask = encoding['attention_mask'].to(device)
-
-    # Получение эмбеддингов и градиентов
     input_embeds = model.bert.embeddings(input_ids)
     input_embeds.requires_grad_()
-    input_embeds.retain_grad()
 
-    outputs = model(
-        inputs_embeds=input_embeds,
-        attention_mask=attention_mask
+    # Вычисляем атрибуции
+    attributions = ig.attribute(
+        inputs=input_embeds,
+        target=None,
+        additional_forward_args=(attention_mask,),
+        n_steps=50
     )
 
-    loss = outputs.logits.sum()
-    loss.backward()
-
-    grads = input_embeds.grad.abs().sum(dim=-1).squeeze()
+    # Суммируем атрибуции по размерности эмбеддингов
+    attributions = attributions.sum(dim=-1).squeeze()
     tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
-    importance = grads.cpu().detach().numpy()
+    importance = attributions.cpu().detach().numpy()
 
-    # Объединение подслов в слова
+    # Объединение подслов
     merged_tokens = []
     merged_scores = []
-
     current_token = ''
     current_score = 0
     current_count = 0
@@ -138,12 +158,11 @@ def explain_keywords(text, tokenizer, model, device, top_n=5):
             current_score = score
             current_count = 1
 
-    # Последний токен
     if current_token:
         merged_tokens.append(current_token)
         merged_scores.append(current_score / max(1, current_count))
 
-    # Удаление специальных токенов, пунктуации и коротких слов
+    # Фильтрация токенов
     def is_valid(token):
         if token in tokenizer.all_special_tokens:
             return False
@@ -156,18 +175,15 @@ def explain_keywords(text, tokenizer, model, device, top_n=5):
         return True
 
     filtered = [(tok, score) for tok, score in zip(merged_tokens, merged_scores) if is_valid(tok)]
-
     top_tokens = sorted(filtered, key=lambda x: x[1], reverse=True)[:top_n]
     return top_tokens
 
-
 def build_explanation(text, tokenizer, model, device, top_n=5):
+    """Построение пояснения на основе ключевых слов."""
     keywords = explain_keywords(text, tokenizer, model, device, top_n)
     keyword_list = [word for word, _ in keywords]
-
     explanation = (
-        f"Пояснение: модель выделила ключевые слова — {', '.join(f'«{w}»' for w in keyword_list)}. "
-        "Эти слова, по мнению модели, чаще всего ассоциируются с определёнными ценностями в обучающей выборке, "
-        "поэтому они повлияли на классификацию данного текста."
+        f"Модель выделила ключевые слова: {', '.join(f'«{w}»' for w in keyword_list)}. "
+        "Эти слова имеют наибольшее влияние на предсказание ценностей, так как они связаны с соответствующими категориями в обучающих данных."
     )
     return explanation, keywords
