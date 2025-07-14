@@ -1,8 +1,66 @@
 import torch
 import numpy as np
+import pandas as pd
 import re
+import string
+import os
 from transformers import BertTokenizer, BertForSequenceClassification
+from torch.utils.data import Dataset
 from config import VALUE_CATEGORIES, MODEL_NAME, MAX_LENGTH, PREDICTION_THRESHOLD
+from captum.attr import IntegratedGradients
+
+class ValuesDataset(Dataset):
+    def __init__(self, filename, tokenizer, max_length=MAX_LENGTH):
+        """Инициализация датасета с проверкой и очисткой данных."""
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"Файл {filename} не найден")
+        
+        self.df = pd.read_csv(filename)
+        expected_columns = ['text'] + VALUE_CATEGORIES
+        if not all(col in self.df.columns for col in expected_columns):
+            raise ValueError(f"В файле {filename} отсутствуют необходимые столбцы: {expected_columns}")
+        
+        # Очистка текста
+        self.df['text'] = self.df['text'].apply(self._clean_text)
+        self.df = self.df.dropna(subset=['text'])
+        self.df = self.df[self.df['text'].str.strip() != '']
+        
+        # Очистка меток: замена NaN и бесконечных значений на 0
+        self.df[VALUE_CATEGORIES] = self.df[VALUE_CATEGORIES].fillna(0)
+        self.df[VALUE_CATEGORIES] = self.df[VALUE_CATEGORIES].clip(lower=0, upper=1)
+        
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.texts = self.df['text'].tolist()
+        self.labels = self.df[VALUE_CATEGORIES].values.astype(np.float32)
+        
+    def _clean_text(self, text):
+        """Очистка текста."""
+        text = str(text).lower().strip()
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'[^\w\s]', ' ', text)
+        return text
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_length,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'labels': torch.tensor(self.labels[idx], dtype=torch.float)
+        }
 
 def load_model(model_path=None):
     tokenizer = BertTokenizer.from_pretrained(MODEL_NAME)

@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatMessages = document.getElementById('chat-messages');
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
+    const loadingIndicator = document.getElementById('loading-indicator');
 
     sendButton.addEventListener('click', sendMessage);
     userInput.addEventListener('keypress', (e) => {
@@ -24,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         userInput.value = '';
         sendButton.disabled = true;
+        loadingIndicator.classList.remove('hidden');
 
         try {
             const response = await fetch('/analyze', {
@@ -62,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        loadingIndicator.classList.add('hidden');
         sendButton.disabled = false;
     }
 });

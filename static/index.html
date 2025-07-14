@@ -7,17 +7,20 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-    <div class="container mx-auto p-4 max-w-3xl">
-        <h1 class="text-2xl font-bold text-center text-white mb-4 p-4 rounded-lg bg-gradient-to-r from-royal-blue to-dark-blue">
+<body class="bg-dark-blue text-white">
+    <div class="container mx-auto p-4 max-w-3xl min-h-screen flex flex-col justify-start">
+        <h1 class="text-2xl font-bold text-center mb-4 p-4 rounded-lg bg-gradient-to-r from-royal-blue to-dark-blue shadow-lg">
             Анализатор ценностей
         </h1>
-        <div id="chat-container" class="bg-white rounded-lg shadow-lg p-4 h-96 overflow-y-auto mb-4">
+        <div id="chat-container" class="rounded-lg shadow-lg p-4 flex-1 overflow-y-auto mb-4 bg-gradient-to-br from-[#1f2e4d] to-[#0d1a33]">
             <div id="chat-messages"></div>
+            <div id="loading-indicator" class="hidden justify-center mt-4">
+                <div class="loader"></div>
+            </div>
         </div>
         <div class="flex">
-            <textarea id="user-input" class="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-royal-blue resize-none" rows="4" placeholder="Введите текст для анализа..."></textarea>
-            <button id="send-button" class="ml-2 px-4 py-2 bg-royal-blue text-white rounded-lg hover:bg-dark-blue transition duration-300">
+            <textarea id="user-input" class="flex-1 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-royal-blue resize-none" rows="4" placeholder="Введите текст для анализа..."></textarea>
+            <button id="send-button" class="ml-2 px-4 py-2 bg-royal-blue text-white rounded-lg hover:bg-light-blue transition duration-300">
                 Отправить
             </button>
         </div>

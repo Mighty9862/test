@@ -1,3 +1,4 @@
+/* Определение цветовых переменных */
 :root {
     --royal-blue: #4169E1;
     --dark-blue: #1E2A78;
@@ -9,6 +10,7 @@
     --text-light: #f8fafc;
 }
 
+/* Стиль фона и текста */
 body {
     background: linear-gradient(to bottom, #0f172a, #1e293b);
     color: var(--text-light);
@@ -19,12 +21,14 @@ body {
     flex-direction: column;
 }
 
+/* Контейнер для чата */
 .container {
     display: flex;
     flex-direction: column;
     height: 100vh;
 }
 
+/* Заголовок */
 h1 {
     background: linear-gradient(to right, var(--royal-blue), var(--dark-blue));
     color: white;
@@ -36,22 +40,24 @@ h1 {
     margin-bottom: 1rem;
 }
 
+/* Контейнер чата */
 #chat-container {
     flex-grow: 1;
     overflow-y: auto;
     padding: 1rem;
-    border-radius: 12px;
+    border-radius: 15px;
     background-color: var(--background-dark);
-    box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
+/* Сообщения */
 #chat-messages {
     display: flex;
     flex-direction: column;
 }
 
 .user-message, .bot-message {
-    margin: 8px 0;
+    margin: 10px 0;
     padding: 12px 16px;
     border-radius: 15px;
     max-width: 80%;
@@ -71,15 +77,17 @@ h1 {
     color: var(--text-light);
 }
 
+/* Текстовое поле и кнопка */
 textarea {
     background-color: #1e293b;
     color: var(--text-light);
     border: 2px solid var(--royal-blue);
     padding: 1rem;
-    border-radius: 12px;
+    border-radius: 15px;
     flex: 1;
     resize: none;
     outline: none;
+    transition: border-color 0.3s ease;
 }
 
 textarea::placeholder {
@@ -91,10 +99,29 @@ button {
     color: white;
     padding: 0.75rem 1.25rem;
     margin-left: 0.5rem;
-    border-radius: 12px;
+    border-radius: 15px;
     transition: background-color 0.3s ease;
 }
 
 button:hover {
     background-color: var(--dark-blue);
+}
+
+/* Скрытие элемента */
+.hidden {
+    display: none;
+}
+
+/* Анимация спиннера */
+.loader {
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-top: 4px solid var(--royal-blue);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
