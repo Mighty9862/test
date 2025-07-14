@@ -1,45 +1,100 @@
 :root {
     --royal-blue: #4169E1;
-    --dark-blue: #2A4B9B;
+    --dark-blue: #1E2A78;
     --light-blue: #6B9BF4;
+    --background-dark: #0f172a;
+    --message-bg: #1e293b;
+    --user-gradient-start: #3b82f6;
+    --user-gradient-end: #2563eb;
+    --text-light: #f8fafc;
 }
 
 body {
-    background: linear-gradient(to bottom, #f3f4f6, #e5e7eb);
+    background: linear-gradient(to bottom, #0f172a, #1e293b);
+    color: var(--text-light);
+    height: 100vh;
+    margin: 0;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+h1 {
+    background: linear-gradient(to right, var(--royal-blue), var(--dark-blue));
+    color: white;
+    padding: 1rem;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
 }
 
 #chat-container {
-    border-radius: 15px;
-    background: #ffffff;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    border-radius: 12px;
+    background-color: var(--background-dark);
+    box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.4);
 }
 
-#chat-messages .user-message, #chat-messages .bot-message {
-    margin: 10px;
+#chat-messages {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-message, .bot-message {
+    margin: 8px 0;
     padding: 12px 16px;
     border-radius: 15px;
     max-width: 80%;
+    word-wrap: break-word;
+    line-height: 1.5;
 }
 
-#chat-messages .user-message {
-    background: linear-gradient(to right, var(--royal-blue), var(--light-blue));
+.user-message {
+    align-self: flex-end;
+    background: linear-gradient(to right, var(--user-gradient-start), var(--user-gradient-end));
     color: white;
-    margin-left: auto;
 }
 
-#chat-messages .bot-message {
-    background: #f1f5f9;
-    color: #1f2937;
-    margin-right: auto;
+.bot-message {
+    align-self: flex-start;
+    background-color: var(--message-bg);
+    color: var(--text-light);
 }
 
 textarea {
-    border-color: var(--royal-blue);
-    border-radius: 15px;
-    transition: border-color 0.3s ease;
+    background-color: #1e293b;
+    color: var(--text-light);
+    border: 2px solid var(--royal-blue);
+    padding: 1rem;
+    border-radius: 12px;
+    flex: 1;
+    resize: none;
+    outline: none;
+}
+
+textarea::placeholder {
+    color: #94a3b8;
 }
 
 button {
-    border-radius: 15px;
+    background-color: var(--royal-blue);
+    color: white;
+    padding: 0.75rem 1.25rem;
+    margin-left: 0.5rem;
+    border-radius: 12px;
     transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: var(--dark-blue);
 }

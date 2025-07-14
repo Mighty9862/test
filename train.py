@@ -1,7 +1,7 @@
 import torch
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, random_split
-from model import ValuesDataset, load_model, predict
+from model import ValuesDataset, load_model, predict_long_text
 from config import MODEL_NAME, BATCH_SIZE, EPOCHS, LEARNING_RATE, MODEL_SAVE_PATH, PREDICTION_THRESHOLD, VALUE_CATEGORIES, OMP_NUM_THREADS, KMP_AFFINITY, EARLY_STOPPING_PATIENCE, LOG_FILE
 import time
 import numpy as np
@@ -10,6 +10,9 @@ import os
 import logging
 import psutil
 from torch.nn import BCEWithLogitsLoss
+
+# Уменьшаем размер батча для CPU
+BATCH_SIZE = 4
 
 def setup_logging():
     """Настройка логирования."""
@@ -92,7 +95,7 @@ def calculate_metrics(model, dataloader, device, threshold):
     positive_preds = np.sum(pred_labels)
     if positive_preds == 0:
         logging.warning(f"Нет положительных предсказаний при пороге {threshold}. Средние вероятности по категориям:")
-        mean_probs = np.mean(all_probs, axis=0)
+        mean_probs = np.mean(probs.cpu().numpy(), axis=0)
         for i, category in enumerate(VALUE_CATEGORIES):
             logging.warning(f"{category}: {mean_probs[i]:.4f}")
     
@@ -126,8 +129,9 @@ def main():
         val_size = len(full_dataset) - train_size
         train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
         
-        train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+        # Устанавливаем num_workers=0 для CPU
+        train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+        val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
         
         logging.info(f"Размер обучающей выборки: {len(train_dataset)}")
         logging.info(f"Размер валидационной выборки: {len(val_dataset)}")
@@ -157,7 +161,7 @@ def main():
         model.train()
         total_loss = 0
         
-        for batch in train_loader:
+        for i, batch in enumerate(train_loader):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
@@ -183,6 +187,10 @@ def main():
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            
+            # Логирование каждые 10 батчей
+            if i % 10 == 0:
+                logging.info(f"Эпоха {epoch+1}/{EPOCHS}, батч {i}/{len(train_loader)}, loss: {loss.item():.4f}")
         
         # Валидация
         model.eval()
@@ -210,11 +218,15 @@ def main():
         epoch_time = time.time() - epoch_start
         logging.info(f"Эпоха {epoch+1}/{EPOCHS} | Loss: {avg_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val F1: {val_f1:.4f} | Время: {epoch_time:.2f} сек")
         
-        # Сохранение модели
+        # Сохранение модели после каждой эпохи
+        torch.save(model.state_dict(), f"{MODEL_SAVE_PATH}_epoch_{epoch+1}.pt")
+        logging.info(f"Модель сохранена после эпохи {epoch+1}")
+
+        # Сохранение лучшей модели
         if val_f1 > best_f1:
             best_f1 = val_f1
             torch.save(model.state_dict(), MODEL_SAVE_PATH)
-            logging.info(f"Модель сохранена с F1: {best_f1:.4f}")
+            logging.info(f"Лучшая модель сохранена с F1: {best_f1:.4f}")
             patience_counter = 0
         else:
             patience_counter += 1
@@ -222,6 +234,17 @@ def main():
                 logging.info(f"Ранняя остановка на эпохе {epoch+1}")
                 break
     
+    # Сохранение финальной модели после завершения обучения
+    torch.save(model.state_dict(), MODEL_SAVE_PATH)
+    logging.info(f"Финальная модель сохранена как {MODEL_SAVE_PATH}")
+
+    # Удаление промежуточных моделей
+    for epoch in range(1, EPOCHS + 1):
+        epoch_model_path = f"{MODEL_SAVE_PATH}_epoch_{epoch}.pt"
+        if os.path.exists(epoch_model_path):
+            os.remove(epoch_model_path)
+            logging.info(f"Удалена промежуточная модель: {epoch_model_path}")
+
     logging.info(f"Обучение завершено. Лучший F1: {best_f1:.4f}")
 
 if __name__ == "__main__":

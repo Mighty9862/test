@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = userInput.value.trim();
         if (!text) return;
 
-        // Отображение сообщения пользователя
+        // Показываем сообщение пользователя
         const userMessage = document.createElement('div');
         userMessage.className = 'user-message';
         userMessage.textContent = text;
@@ -37,18 +37,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
+
             const botMessage = document.createElement('div');
             botMessage.className = 'bot-message';
-            
-            let resultText = '<strong>Найденные ценности:</strong><ul>';
-            data.categories.forEach(cat => {
-                resultText += `<li>${cat.name}: ${cat.probability.toFixed(2)}%</li>`;
-            });
-            resultText += '</ul>';
-            resultText += `<p><strong>Пояснение:</strong> ${data.explanation}</p>`;
-            resultText += '<p><strong>Ключевые слова:</strong> ' + data.keywords.map(k => `${k.word} (${k.score.toFixed(2)})`).join(', ') + '</p>';
 
-            botMessage.innerHTML = resultText;
+            if (!data.categories || !Array.isArray(data.categories)) {
+                botMessage.innerHTML = '<p>Ошибка: сервер не вернул категории.</p>';
+            } else {
+                let resultText = '<strong>Найденные ценности:</strong><ul>';
+                data.categories.forEach(cat => {
+                    resultText += `<li>${cat.name}: ${cat.probability.toFixed(2)}%</li>`;
+                });
+                resultText += '</ul>';
+                botMessage.innerHTML = resultText;
+            }
+
             chatMessages.appendChild(botMessage);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         } catch (error) {

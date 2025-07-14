@@ -2,15 +2,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from model import load_model, predict_long_text, build_explanation
-from config import MODEL_SAVE_PATH, VALUE_CATEGORIES
+from model import load_model, predict_long_text
+from config import MODEL_SAVE_PATH
 import logging
-import torch
 
 app = FastAPI(title="Values Classifier Chatbot")
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
+# Логирование
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Загрузка модели при старте
@@ -21,7 +20,7 @@ except Exception as e:
     logger.error(f"Ошибка загрузки модели: {e}")
     raise Exception(f"Не удалось загрузить модель: {e}")
 
-# Монтирование статических файлов
+# Статика
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class TextInput(BaseModel):
@@ -39,19 +38,12 @@ async def analyze_text(input: TextInput):
         if not text.strip():
             raise HTTPException(status_code=400, detail="Текст не может быть пустым")
 
-        # Предсказание
-        results = predict_long_text(text, tokenizer, model, device)
-        
-        # Объяснение
-        explanation, keywords = build_explanation(text[:1000], tokenizer, model, device)  # Ограничиваем для объяснения
+        top_values = predict_long_text(text, tokenizer, model, device)
 
-        # Формирование ответа
         response = {
             "categories": [
-                {"name": category, "probability": float(prob)} for category, prob in results
-            ],
-            "explanation": explanation,
-            "keywords": [{"word": word, "score": float(score)} for word, score in keywords]
+                {"name": category, "probability": float(prob)} for category, prob in top_values
+            ]
         }
         return response
     except Exception as e:
