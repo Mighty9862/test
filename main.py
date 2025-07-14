@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from model import load_model, predict_long_text
 from config import MODEL_SAVE_PATH
 import logging
+import os
 
 app = FastAPI(title="Values Classifier Chatbot")
 
@@ -49,3 +51,11 @@ async def analyze_text(input: TextInput):
     except Exception as e:
         logger.error(f"Ошибка анализа текста: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/download-model")
+async def download_model():
+    file_path = "values_classifier.pt"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл модели не найден")
+
+    return FileResponse(path=file_path, filename="values_classifier.pt", media_type='application/octet-stream')
