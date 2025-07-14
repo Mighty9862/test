@@ -11,9 +11,6 @@ import logging
 import psutil
 from torch.nn import BCEWithLogitsLoss
 
-# Уменьшаем размер батча для CPU
-BATCH_SIZE = 4
-
 def setup_logging():
     """Настройка логирования."""
     logging.basicConfig(
@@ -35,7 +32,7 @@ def calculate_class_weights(dataset):
         if pos_count > 0:
             weight = neg_count / pos_count
         else:
-            weight = 1.0  # Избегаем деления на ноль
+            weight = 1.0
         pos_weights.append(weight)
     return torch.tensor(pos_weights, dtype=torch.float)
 
@@ -114,12 +111,10 @@ def main():
     setup_logging()
     logging.info("Начало обучения...")
 
-    # Загрузка модели
     logging.info("Загрузка модели...")
     tokenizer, model, device = load_model()
     logging.info(f"Модель загружена на {device}")
 
-    # Загрузка данных
     try:
         logging.info("Загрузка датасета...")
         full_dataset = ValuesDataset('values_dataset.csv', tokenizer)
@@ -128,8 +123,7 @@ def main():
         train_size = int(0.8 * len(full_dataset))
         val_size = len(full_dataset) - train_size
         train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-        
-        # Устанавливаем num_workers=0 для CPU
+
         train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
         val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
         
@@ -140,18 +134,15 @@ def main():
         logging.error(f"Ошибка загрузки данных: {e}")
         return
 
-    # Вычисление весов классов
     pos_weights = calculate_class_weights(full_dataset).to(device)
     optimizer = AdamW(model.parameters(), lr=LEARNING_RATE)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=2, verbose=True
     )
 
-    # Оптимизация порога
     logging.info("Оптимизация порога предсказания...")
     best_threshold = optimize_threshold(model, val_loader, device)
 
-    # Обучение
     best_f1 = 0.0
     patience_counter = 0
     logging.info(f"Начало обучения на {device}...")
@@ -175,7 +166,6 @@ def main():
             outputs = model(input_ids, attention_mask=attention_mask)
             logits = outputs.logits
             
-            # Взвешенная функция потерь
             loss_fn = BCEWithLogitsLoss(pos_weight=pos_weights)
             loss = loss_fn(logits, labels)
             
@@ -188,11 +178,9 @@ def main():
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
-            # Логирование каждые 10 батчей
             if i % 10 == 0:
                 logging.info(f"Эпоха {epoch+1}/{EPOCHS}, батч {i}/{len(train_loader)}, loss: {loss.item():.4f}")
         
-        # Валидация
         model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -209,20 +197,16 @@ def main():
         avg_loss = total_loss / len(train_loader)
         avg_val_loss = val_loss / len(val_loader)
         
-        # Расчёт метрик
         val_f1 = calculate_metrics(model, val_loader, device, best_threshold)
         
-        # Обновление планировщика
         scheduler.step(avg_val_loss)
         
         epoch_time = time.time() - epoch_start
         logging.info(f"Эпоха {epoch+1}/{EPOCHS} | Loss: {avg_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val F1: {val_f1:.4f} | Время: {epoch_time:.2f} сек")
         
-        # Сохранение модели после каждой эпохи
         torch.save(model.state_dict(), f"{MODEL_SAVE_PATH}_epoch_{epoch+1}.pt")
         logging.info(f"Модель сохранена после эпохи {epoch+1}")
 
-        # Сохранение лучшей модели
         if val_f1 > best_f1:
             best_f1 = val_f1
             torch.save(model.state_dict(), MODEL_SAVE_PATH)
@@ -234,11 +218,9 @@ def main():
                 logging.info(f"Ранняя остановка на эпохе {epoch+1}")
                 break
     
-    # Сохранение финальной модели после завершения обучения
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     logging.info(f"Финальная модель сохранена как {MODEL_SAVE_PATH}")
 
-    # Удаление промежуточных моделей
     for epoch in range(1, EPOCHS + 1):
         epoch_model_path = f"{MODEL_SAVE_PATH}_epoch_{epoch}.pt"
         if os.path.exists(epoch_model_path):

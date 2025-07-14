@@ -18,11 +18,13 @@
                 <div class="loader"></div>
             </div>
         </div>
-        <div class="flex">
+        <div class="flex flex-col md:flex-row gap-2 items-stretch">
             <textarea id="user-input" class="flex-1 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-royal-blue resize-none" rows="4" placeholder="Введите текст для анализа..."></textarea>
-            <button id="send-button" class="ml-2 px-4 py-2 bg-royal-blue text-white rounded-lg hover:bg-light-blue transition duration-300">
-                Отправить
-            </button>
+            <div class="flex flex-col gap-2 md:w-1/3">
+                <input type="file" id="file-input" accept=".txt,.docx,.pdf" class="text-sm text-white bg-dark-blue border border-royal-blue rounded-lg px-3 py-2 file:mr-2 file:py-1 file:px-3 file:border-0 file:text-sm file:bg-royal-blue file:text-white file:rounded-lg cursor-pointer" />
+                <button id="send-button" class="px-4 py-2 bg-royal-blue text-white rounded-lg hover:bg-light-blue transition duration-300">Отправить</button>
+                <button id="send-file-button" class="px-4 py-2 bg-royal-blue text-white rounded-lg hover:bg-light-blue transition duration-300">Отправить файл</button>
+            </div>
         </div>
     </div>
     <script src="/static/script.js"></script>

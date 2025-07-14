@@ -8,3 +8,6 @@ numpy==1.26.4
 captum==0.7.0
 psutil==6.0.0
 scikit-learn==1.5.2
+python-docx
+PyPDF2
+python-multipart

@@ -20,12 +20,10 @@ class ValuesDataset(Dataset):
         if not all(col in self.df.columns for col in expected_columns):
             raise ValueError(f"В файле {filename} отсутствуют необходимые столбцы: {expected_columns}")
         
-        # Очистка текста
         self.df['text'] = self.df['text'].apply(self._clean_text)
         self.df = self.df.dropna(subset=['text'])
         self.df = self.df[self.df['text'].str.strip() != '']
-        
-        # Очистка меток: замена NaN и бесконечных значений на 0
+
         self.df[VALUE_CATEGORIES] = self.df[VALUE_CATEGORIES].fillna(0)
         self.df[VALUE_CATEGORIES] = self.df[VALUE_CATEGORIES].clip(lower=0, upper=1)
         
