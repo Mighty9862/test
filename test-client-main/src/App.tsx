@@ -76,7 +76,10 @@ export default function App() {
     }
   };
 
-  const formatResults = (categories: Category[] = []) => {
+  const formatResults = (categories: Category[] | undefined) => {
+    if (!categories || categories.length === 0) {
+      return "Нет данных для отображения.";
+    }
     return categories
       .map((cat) => `${cat.name}: ${cat.probability.toFixed(1)}%`)
       .join("\n");
@@ -139,7 +142,6 @@ export default function App() {
             headers: {
               "Content-Type": "multipart/form-data",
             },
-            timeout: 30000,
           },
         );
       } else {
