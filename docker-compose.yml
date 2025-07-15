@@ -1,14 +1,31 @@
 version: '3.8'
 
 services:
-  app:
+  backend:
     build:
-      context: .
+      context: ./test-api
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./static:/app/static
+      - ./test-api/static:/app/static
       - ./values_classifier.pt:/app/values_classifier.pt
     environment:
       - PYTHONUNBUFFERED=1
+    container_name: very-cool-parser-backend
+
+  frontend:
+    build:
+      context: ./test-client-main
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    container_name: very-cool-parser-frontend
+    environment:
+      - VITE_API_URL=http://backend:8000
+
+networks:
+  default:
+    name: very-cool-parser-network
