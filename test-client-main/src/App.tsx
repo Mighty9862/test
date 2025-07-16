@@ -152,7 +152,6 @@ export default function App() {
             headers: {
               "Content-Type": "application/json",
             },
-            timeout: 10000,
           },
         );
       }
@@ -177,7 +176,7 @@ export default function App() {
             error.response.data.message || error.message
           }`;
         } else if (error.request) {
-          errorMessage = "Нет ответа от сервера. Проверьте подключение.";
+          errorMessage = `Нет ответа от сервера. ${error.message}`;
         } else {
           errorMessage = `Ошибка запроса: ${error.message}`;
         }
