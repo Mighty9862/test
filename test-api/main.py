@@ -61,7 +61,7 @@ async def analyze_text(input: TextInput):
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+        MAX_FILE_SIZE = 999 * 1024 * 1024  # 999 MB
         filename = file.filename.lower()
         contents = await file.read()
         if len(contents) > MAX_FILE_SIZE:

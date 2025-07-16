@@ -142,6 +142,7 @@ export default function App() {
             headers: {
               "Content-Type": "multipart/form-data",
             },
+            timeout: 600000, // 30 секунд таймаут для загрузки файлов
           },
         );
       } else {
@@ -152,6 +153,7 @@ export default function App() {
             headers: {
               "Content-Type": "application/json",
             },
+            timeout: 600000, // 30 секунд таймаут для анализа текста
           },
         );
       }
