@@ -11,7 +11,11 @@ import docx
 import PyPDF2
 from io import BytesIO
 
-app = FastAPI(title="Values Classifier Chatbot")
+app = FastAPI(
+    title="Values Classifier Chatbot",
+    # Увеличить лимит загрузки файлов
+    max_request_size=999 * 1024 * 1024  # 999 MB
+)
 
 # CORS middleware
 app.add_middleware(
@@ -32,15 +36,8 @@ except Exception as e:
     logger.error(f"Ошибка загрузки модели: {e}")
     raise Exception(f"Не удалось загрузить модель: {e}")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 class TextInput(BaseModel):
     text: str
-
-@app.get("/", response_class=HTMLResponse)
-async def get_index():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
 
 @app.post("/analyze")
 async def analyze_text(input: TextInput):
@@ -64,36 +61,37 @@ async def analyze_text(input: TextInput):
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
+        MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
         filename = file.filename.lower()
         contents = await file.read()
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="Файл слишком большой (максимум 5 МБ)")
 
         if filename.endswith(".txt"):
             text = contents.decode("utf-8", errors="ignore")
-
         elif filename.endswith(".docx"):
             text = extract_text_from_docx(contents)
-
         elif filename.endswith(".pdf"):
             text = extract_text_from_pdf(contents)
-
         else:
             raise HTTPException(status_code=400, detail="Поддерживаются только .txt, .docx и .pdf файлы")
 
-        if not text.strip():
+        if not text or not text.strip():
             raise HTTPException(status_code=400, detail="Файл не содержит текста для анализа")
 
         top_values = predict_long_text(text, tokenizer, model, device)
-
         response = {
             "categories": [
                 {"name": category, "probability": float(prob)} for category, prob in top_values
             ]
         }
         return response
-
+    except HTTPException as e:
+        logger.error(f"Ошибка загрузки файла: {e.detail}")
+        raise
     except Exception as e:
         logger.error(f"Ошибка загрузки файла: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Ошибка обработки файла. Проверьте формат и содержимое.")
 
 @app.get("/download-model")
 async def download_model():
@@ -110,6 +108,7 @@ def extract_text_from_docx(contents: bytes) -> str:
         text = "\n".join([para.text for para in doc.paragraphs])
     except Exception as e:
         logger.error(f"Ошибка чтения DOCX: {e}")
+        raise HTTPException(status_code=400, detail="Ошибка чтения DOCX файла. Возможно, файл повреждён или не поддерживается.")
     return text
 
 def extract_text_from_pdf(contents: bytes) -> str:
@@ -122,4 +121,5 @@ def extract_text_from_pdf(contents: bytes) -> str:
                 text += page_text + "\n"
     except Exception as e:
         logger.error(f"Ошибка чтения PDF: {e}")
+        raise HTTPException(status_code=400, detail="Ошибка чтения PDF файла. Возможно, файл повреждён или не поддерживается.")
     return text
